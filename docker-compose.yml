@@ -1,0 +1,40 @@
+services:
+  todo-app:
+    # alternativ mit image
+    # image: ghcr.io/<owner>/<repo>:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:80"
+    environment:
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:?DB_NAME fehlt}
+      DB_USER: ${DB_USER:?DB_USER fehlt}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD fehlt}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(file_get_contents('http://127.0.0.1/health.php') === \"ok\\n\" ? 0 : 1);"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:?DB_NAME fehlt}
+      MYSQL_USER: ${DB_USER:?DB_USER fehlt}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD fehlt}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD fehlt}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysql --protocol=TCP -h 127.0.0.1 -u \"$$MYSQL_USER\" \"$$MYSQL_DATABASE\" -e 'SELECT 1' >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+volumes:
+  mysql_data:

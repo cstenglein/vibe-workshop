@@ -1,0 +1,11 @@
+:root { font-family: system-ui, sans-serif; color: #222; background: #fafafa; }
+main { max-width: 44rem; margin: 3rem auto; padding: 0 1rem; }
+label { display: block; margin-bottom: .5rem; }
+input, button { font: inherit; padding: .5rem; }
+input[name="title"] { width: min(100%, 28rem); box-sizing: border-box; }
+button { cursor: pointer; }
+ul { list-style: none; padding: 0; }
+li { border-bottom: 1px solid #ccc; padding: 1rem 0; }
+.title { display: block; overflow-wrap: anywhere; }
+small { display: block; color: #555; margin: .4rem 0; }
+[role="alert"] { color: #a01818; }

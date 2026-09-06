@@ -1,0 +1,43 @@
+name: Docker Publish (deaktiviertes Beispiel)
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Docker-Image veröffentlichen (deaktiviertes Beispiel)
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: App testen
+        run: ./scripts/test.sh
+
+      - name: Image bauen und mit Commit-SHA taggen
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
+          docker build \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$image" .
+
+      - name: Bei GHCR anmelden und Image veröffentlichen
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          trap 'docker logout ghcr.io' EXIT
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
+
+    # Für ein späteres Registry-Deployment in Compose image: ghcr.io/<owner>/<repo>:<sha>
+    # statt build: . verwenden und auf dem Server compose pull / up -d ausführen.
+    # Bei privaten Images benötigt auch der Server einen Registry-Login.

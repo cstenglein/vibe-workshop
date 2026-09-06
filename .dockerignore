@@ -1,0 +1,10 @@
+*
+!app/
+!app/**
+!docker/
+!docker/**
+!migrations/
+!migrations/**
+!scripts/
+!scripts/migrate.php
+!Dockerfile

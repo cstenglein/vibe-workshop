@@ -1,0 +1,79 @@
+name: Dev
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: dev-${{ github.ref }}
+  cancel-in-progress: false
+  queue: max
+
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: App testen
+        run: ./scripts/test.sh
+
+  deploy:
+    name: Dev deployen
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      APP_URL: ${{ vars.APP_URL }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: SSH-Verbindung vorbereiten
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          [[ "$DEPLOY_PORT" =~ ^[1-9][0-9]{0,4}$ ]]
+          [[ "$DEPLOY_PATH" =~ ^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)+$ ]]
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF_SSH
+          Host dev-server
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            Port $DEPLOY_PORT
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            BatchMode yes
+          EOF_SSH
+
+      - name: Dateien auf den Server kopieren
+        run: |
+          ssh dev-server "test -f '$DEPLOY_PATH/.env' && test ! -e '$DEPLOY_PATH/.git'"
+          rsync -az --delete --exclude='.git/' --exclude='.env' --exclude='.env.*' \
+            ./ "dev-server:$DEPLOY_PATH/"
+
+      - name: App auf dem Server starten
+        run: ssh dev-server "cd '$DEPLOY_PATH' && docker compose -p todo-dev up -d --build --wait --wait-timeout 240"
+
+      - name: Erreichbarkeit prüfen
+        run: curl --fail --show-error --silent --retry 5 --retry-all-errors --connect-timeout 10 --max-time 20 "${APP_URL%/}/health.php"
