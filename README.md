@@ -1,141 +1,247 @@
 # Todo-App
 
-Die App kann Todos **anzeigen, anlegen und löschen**. PHP zeigt die Webseite,
-MySQL speichert die Todos, Docker startet beides.
+Eine einfache Webanwendung zum **Anlegen, Anzeigen und Löschen von Todos**.
+Die Liste zeigt die neuesten Einträge zuerst, einschließlich Erstellungszeitpunkt.
+Todo-Titel dürfen 1 bis 255 Zeichen lang sein.
 
-## Starten
+Die App verwendet PHP 8.4 mit Apache und MySQL 8.4. Docker Compose startet beide
+Dienste; MySQL speichert die Daten dauerhaft in einem Docker-Volume.
 
-Beim ersten Mal:
+**Die App hat keinen Login. Alle Personen, die sie erreichen können, können Todos
+anzeigen, anlegen und löschen.**
+
+## Lokal starten
+
+Voraussetzung: Docker mit Docker Compose. Alle folgenden Compose-Befehle im
+Projektverzeichnis ausführen.
 
 ```bash
 cp .env.example .env
+chmod 600 .env
 ```
 
-In `.env` die beiden Passwort-Platzhalter durch eigene Passwörter ersetzen. Dann:
+In `.env` die Platzhalter für `DB_PASSWORD` und `DB_ROOT_PASSWORD` durch zwei
+unterschiedliche, zufällige Passwörter ersetzen. Danach starten:
 
 ```bash
 docker compose up -d --build --wait
 ```
 
-Im Browser **http://localhost:8080** öffnen. Läuft Docker auf dem VPS, wird die
-App über die vorbereitete Domain geöffnet.
+Die App ist unter **http://localhost:8080** erreichbar. Die Datenbank wird beim
+Start eingerichtet; neue SQL-Migrationen werden automatisch ausgeführt.
 
-## Welche Datei macht was?
+## Konfiguration mit .env
 
-| Datei | Aufgabe |
+Docker Compose liest `.env` im aktuellen Projektverzeichnis automatisch ein und
+setzt die Werte in die `${…}`-Ausdrücke der `docker-compose.yml` ein. Ein zusätzlicher
+`env_file:`-Eintrag ist dafür nicht erforderlich. Über `environment:` werden die
+benötigten Datenbankwerte an die Container übergeben; die Datei selbst wird nicht
+in das Image kopiert.
+
+| Variable | Bedeutung |
 | --- | --- |
-| `app/public/index.php` | Todo-Liste und Formulare zum Anlegen und Löschen |
-| `app/public/style.css` | Aussehen der Seite |
-| `app/bootstrap.php` | Verbindung zur Datenbank |
-| `migrations/001_create_todos.sql` | Legt die Todo-Tabelle an |
-| `scripts/migrate.php` | Führt neue Datenbankänderungen beim Start aus |
-| `Dockerfile` | Baut den PHP-Container; `docker/` enthält dessen Starteinstellungen |
-| `docker-compose.yml` | Startet PHP und MySQL zusammen |
-| `.env` | Eigene Einstellungen und Passwörter – bleibt außerhalb von Git |
-| `scripts/test.sh` | Startet eine separate Test-App und räumt sie anschließend auf |
-| `tests/http_test.php` | Prüft die App automatisch mit PHP |
-| `.github/workflows/dev.yml` | Testet Änderungen und veröffentlicht sie auf dem Dev-VPS |
+| `DB_NAME` | Name der Datenbank, standardmäßig `todos` in der Vorlage |
+| `DB_USER` | Datenbankbenutzer der App, standardmäßig `todos` in der Vorlage |
+| `DB_PASSWORD` | Passwort des Datenbankbenutzers; muss gesetzt werden |
+| `DB_ROOT_PASSWORD` | Separates MySQL-Root-Passwort; muss gesetzt werden |
+| `APP_PORT` | Port auf dem Host; ohne Angabe wird `8080` verwendet |
+| `CADDY_NETWORK` | Nur beim Docker-Caddy-Deployment: Name des bestehenden Caddy-Netzwerks |
 
-## Nach einer Änderung
+Bereits gesetzte Shell-Variablen haben bei der Ersetzung Vorrang vor `.env`.
+Eine andere Datei lässt sich explizit auswählen:
 
 ```bash
-./scripts/test.sh
+docker compose --env-file .env.production up -d --build --wait
 ```
 
-Benötigt nur Docker und Bash. PHP läuft bereits im Container; eine weitere
-Programmiersprache muss nicht installiert werden. Die Tests prüfen Anlegen,
-Anzeigen, Löschen, Eingaben, Formularschutz und den Erhalt der Daten nach Neustart.
-Die Todos der normalen App werden dabei nicht verändert.
+`.env` enthält Zugangsdaten und gehört nicht ins Repository. Änderungen an den
+Passwörtern in `.env` ändern nicht die Zugangsdaten einer bereits initialisierten
+MySQL-Datenbank.
 
-Um die geänderte App selbst anzusehen:
+Details: [Variablen in Docker Compose](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/).
 
-```bash
-docker compose up -d --build --wait
-```
+## Deployment mit Caddy
 
-Für den Workshop gilt:
+Auf dem Server werden Docker Compose, die Projektdateien und eine ausgefüllte
+`.env` benötigt. Die Einrichtung entspricht dem lokalen Start oben.
 
-**Eigener Branch → Änderung → Tests → Commit → Push → Pull Request → Merge.**
+Die gewünschte Domain, etwa `todo.example.at`, muss per DNS auf den Server zeigen.
+Für Caddy müssen die TCP-Ports **80 und 443** erreichbar sein. Caddy übernimmt die
+Zertifikatsverwaltung und die Weiterleitung von HTTP auf HTTPS automatisch.
+Siehe [Automatic HTTPS](https://caddyserver.com/docs/automatic-https).
 
-GitHub prüft jeden Pull Request. Nach einem Merge nach `main` testet GitHub erneut,
-kopiert die Dateien auf den VPS und startet dort die neue Version. Alle Schritte
-stehen direkt in `.github/workflows/dev.yml`. Unter **GitHub → Actions** sieht man,
-ob sie erfolgreich waren. Deployments laufen nacheinander.
+Welche Proxy-Adresse verwendet wird, hängt davon ab, wo Caddy läuft:
 
-## Einmalige Vorbereitung durch den Workshop-Leiter
-
-Diese Einrichtung erfolgt **vor dem Workshop**. Der Teilnehmer braucht einen
-fertigen VPS-Zugang und eine funktionierende Domain.
-
-Der VPS benötigt Docker Compose, SSH, rsync und Caddy. Der SSH-Benutzer muss Docker
-verwenden dürfen. Beispielwerte durch die eigenen Werte ersetzen:
-
-| Einstellung | Beispiel |
+| Caddy läuft … | Proxy-Ziel |
 | --- | --- |
-| VPS | `vps.example.at` |
-| SSH-Benutzer | `andreas` |
-| Deployment-Ordner | `/home/andreas/deploy/todo-dev` |
-| Domain | `dev.example.at` |
+| direkt auf dem Host | `127.0.0.1:8080` bzw. der eingestellte `APP_PORT` |
+| als Container im gemeinsamen Docker-Netzwerk | `todo-app:80` |
 
-Auf dem VPS einen **eigenen, leeren Deployment-Ordner** anlegen und die Vorlage
-`.env.example` dort als `.env` speichern. Passwörter setzen und Folgendes eintragen:
+### Variante A: Caddy direkt auf dem Host
 
-```dotenv
-APP_PORT=8080
+Die vorhandene `docker-compose.yml` veröffentlicht die App ausschließlich auf der
+Loopback-Adresse des Hosts:
+
+```yaml
+ports:
+  - "127.0.0.1:${APP_PORT:-8080}:80"
 ```
 
-Die Datei mit `chmod 600 .env` schützen. Dieser Ordner ist getrennt vom
-Entwicklungsprojekt: GitHub ersetzt dort die Dateien, erhält aber die `.env`.
-Dort deshalb keine anderen Dateien oder Backups ablegen.
-
-In Caddy eintragen und die Konfiguration neu laden:
+In die Caddy-Konfiguration, üblicherweise `/etc/caddy/Caddyfile`, eintragen:
 
 ```caddyfile
-dev.example.at {
+todo.example.at {
     reverse_proxy 127.0.0.1:8080
 }
 ```
 
-DNS muss auf den VPS zeigen. Nur Caddy veröffentlicht die App; MySQL hat keinen
-öffentlichen Port. Die App hat keinen Login – alle Besucher können Todos ändern.
+Falls `APP_PORT` geändert wurde, auch den Port im Caddyfile anpassen. Bei einer
+Caddy-Installation als systemd-Dienst die Konfiguration prüfen und neu laden:
 
-Die App läuft lokal über HTTP und über Caddy mit HTTPS. Caddy übermittelt das
-Browser-Protokoll automatisch; die App setzt damit sichere Session-Cookies.
-Eine `APP_URL` in `.env` ist nicht nötig. Die unten genannte GitHub-Variable
-`APP_URL` dient nur zur Erreichbarkeitsprüfung nach dem Deployment.
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
 
-Einen eigenen SSH-Schlüssel für GitHub anlegen. Den öffentlichen Schlüssel beim
-VPS-Benutzer hinterlegen. Den Hostschlüssel des VPS über dessen Konsole prüfen;
-einen ungeprüften `ssh-keyscan`-Wert nicht einfach übernehmen.
+### Variante B: Caddy in Docker
 
-Unter **GitHub → Settings → Secrets and variables → Actions** eintragen:
+Caddy und `todo-app` müssen einem gemeinsamen Docker-Netzwerk angehören. Innerhalb
+dieses Netzwerks verwendet Caddy den **Service-Namen `todo-app` und Container-Port
+`80`**. `127.0.0.1` würde auf den Caddy-Container selbst zeigen; `APP_PORT` spielt
+für diese Verbindung keine Rolle.
 
-| Art | Name | Wert |
-| --- | --- | --- |
-| Secret | `SSH_PRIVATE_KEY` | Privater Deployment-Schlüssel ohne Passphrase |
-| Secret | `SSH_KNOWN_HOSTS` | Geprüfte Known-Hosts-Zeile des VPS |
-| Variable | `DEPLOY_HOST` | `vps.example.at` |
-| Variable | `DEPLOY_USER` | `andreas` |
-| Variable | `DEPLOY_PORT` | `22` (optional) |
-| Variable | `DEPLOY_PATH` | `/home/andreas/deploy/todo-dev` |
-| Variable | `APP_URL` | `https://dev.example.at` |
+Die zusätzliche Datei `docker-compose.caddy.yml` verbindet die App mit dem
+**bestehenden externen Netzwerk von Caddy**. In `.env` dessen Namen eintragen:
 
-Für `main` Pull Requests und den erfolgreichen Check **Tests** vorschreiben.
-Danach einen ersten Merge durchführen und Domain sowie GitHub Actions prüfen.
-Wenn Entwicklungsprojekt und Deployment auf demselben VPS laufen, im
-Entwicklungsprojekt einen anderen `APP_PORT`, etwa `8081`, verwenden.
+```dotenv
+CADDY_NETWORK=caddy
+```
 
-## Wenn etwas nicht funktioniert
+`caddy` durch den tatsächlichen Netzwerknamen ersetzen. Das Netzwerk wird von
+dieser App weder angelegt noch gelöscht. Caddy muss bereits damit verbunden sein.
+
+Die App mit beiden Compose-Dateien starten:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d --build --wait
+```
+
+Auch bei Updates und anderen Compose-Befehlen für dieses Deployment beide
+`-f`-Optionen verwenden. Der lokale Start mit `docker compose up -d --build --wait`
+verwendet nur die Basisdatei und benötigt weder Caddy noch das externe Netzwerk.
+
+Die App bleibt zusätzlich im internen Compose-Netzwerk mit `db` verbunden.
+Die Datenbank wird nicht mit dem Caddy-Netzwerk verbunden. Die lokale
+Portfreigabe auf `127.0.0.1` bleibt erhalten.
+
+Der Caddy-Container muss die Host-Ports `80:80` und `443:443` veröffentlichen und
+seine Zertifikatsdaten unter `/data` dauerhaft speichern. Das in den Container
+eingebundene Caddyfile erhält folgenden Eintrag:
+
+```caddyfile
+todo.example.at {
+    reverse_proxy todo-app:80
+}
+```
+
+Nach dem Start der App im Caddy-Projektverzeichnis die Konfiguration
+neu laden (Service-Name und Konfigurationspfad gegebenenfalls anpassen):
+
+```bash
+docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+```
+
+Details: [Docker-Netzwerke](https://docs.docker.com/compose/how-tos/networking/) und
+[Caddy betreiben](https://caddyserver.com/docs/running).
+
+### Deployment prüfen
+
+Die App unter **https://todo.example.at** öffnen. Der Health-Endpunkt prüft auch
+die Datenbankverbindung:
+
+```bash
+curl --fail https://todo.example.at/health.php
+```
+
+Bei Erfolg antwortet er mit `ok`. Eine `APP_URL` in `.env` ist nicht erforderlich.
+Caddy übermittelt das Browser-Protokoll an die App, die bei HTTPS sichere
+Session-Cookies setzt.
+
+## Betrieb und Updates
+
+Nach dem Bereitstellen neuer Projektdateien im selben Verzeichnis starten:
+
+```bash
+docker compose up -d --build --wait
+```
+
+Status und Logs anzeigen:
 
 ```bash
 docker compose ps
 docker compose logs --tail=50
 ```
 
-Für die von GitHub gestartete App: im Deployment-Ordner dieselben Befehle mit
-`docker compose -p todo-dev` verwenden.
+Die Daten bleiben bei Neustarts und `docker compose down` erhalten.
+**`docker compose down --volumes` löscht auch die Datenbankdaten.**
+Vor Datenbankänderungen ein Backup erstellen. Neue Migrationen als nächste
+nummerierte SQL-Datei in `migrations/` hinzufügen und wiederholbar gestalten;
+bereits ausgeführte Migrationen nicht verändern.
 
-Die Daten bleiben bei einem Neustart erhalten. **`down --volumes` löscht die Daten.**
-Neue Datenbankänderungen als nächste SQL-Datei hinzufügen; bereits ausgeführte
-Migrationen nicht ändern. Vor Schemaänderungen Daten sichern. Geänderte Passwörter
-in `.env` ändern die Zugangsdaten einer bereits vorhandenen Datenbank nicht.
+Ein optionaler GitHub-Actions-Workflow für Tests und SSH-Deployment ist in
+[`.github/workflows/dev.yml`](.github/workflows/dev.yml) enthalten. Er benötigt die
+Secrets `SSH_PRIVATE_KEY` und `SSH_KNOWN_HOSTS` sowie die Variablen `DEPLOY_HOST`,
+`DEPLOY_USER`, `DEPLOY_PATH`, `APP_URL` und optional `DEPLOY_PORT` (Standard: `22`).
+`APP_URL` ist hier die öffentliche URL für den Health-Check nach dem Deployment.
+
+Der Workflow erwartet einen eigenen Deployment-Ordner mit vorbereiteter `.env`
+und ohne Git-Checkout. Er synchronisiert die Projektdateien per rsync und entfernt
+dabei sonstige Dateien; die `.env` bleibt erhalten. Caddy-Konfiguration und Backups
+außerhalb dieses Ordners verwalten. Der Server benötigt SSH, rsync und Docker
+Compose; der Deployment-Benutzer muss Docker ausführen dürfen. Den öffentlichen
+Deployment-Schlüssel auf dem Server hinterlegen und den SSH-Hostschlüssel vor der
+Übernahme in `SSH_KNOWN_HOSTS` über einen vertrauenswürdigen Zugang prüfen.
+
+Nach erfolgreichen Tests auf `main` startet der Workflow die App mit dem
+Compose-Projektnamen `todo-dev`. Der Workflow verwendet beide Compose-Dateien
+und damit **Variante B mit Caddy in Docker**. Vor dem ersten Deployment auf dem Server `CADDY_NETWORK` in `.env`
+auf den Namen des bestehenden, mit Caddy verbundenen Netzwerks setzen. Der
+Workflow prüft die Compose-Konfiguration vor dem Start; ein fehlender Netzwerkname
+oder ein nicht vorhandenes externes Netzwerk führt zum Abbruch des Deployments.
+
+Für manuelle Befehle dieses Deployments ebenfalls denselben Projektnamen und
+beide Compose-Dateien verwenden, damit dieselben Container, Netzwerke und Volumes
+angesprochen werden, zum Beispiel:
+
+```bash
+docker compose -p todo-dev -f docker-compose.yml -f docker-compose.caddy.yml ps
+```
+
+Lokale Starts und die Tests verwenden weiterhin nur die Basisdatei und benötigen
+kein Caddy-Netzwerk.
+
+## Entwicklung und Tests
+
+Änderungen auf einem eigenen Branch vornehmen und anschließend testen:
+
+```bash
+./scripts/test.sh
+```
+
+Das Skript benötigt Docker und Bash und verwendet ein separates Compose-Projekt
+mit eigener Testdatenbank. Es prüft PHP-Syntax, Todo-Funktionen, Eingabevalidierung,
+Formularschutz, Migrationen, Datenpersistenz und Datenbankausfälle. Die Testdaten
+werden anschließend entfernt.
+
+| Datei | Aufgabe |
+| --- | --- |
+| `app/public/index.php` | Todo-Liste und Formulare |
+| `app/public/style.css` | Gestaltung der Oberfläche |
+| `app/public/health.php` | Health-Check einschließlich Datenbankverbindung |
+| `app/bootstrap.php` | Datenbankverbindung und gemeinsame Funktionen |
+| `migrations/` | Nummerierte SQL-Migrationen |
+| `scripts/migrate.php` | Führt Migrationen beim Containerstart aus |
+| `Dockerfile`, `docker/` | PHP-Image und Startkonfiguration |
+| `docker-compose.yml` | App- und Datenbankdienste für lokalen Start oder Caddy auf dem Host |
+| `docker-compose.caddy.yml` | Optionale Verbindung zum bestehenden Caddy-Netzwerk |
+| `tests/http_test.php` | HTTP-Funktionstests |

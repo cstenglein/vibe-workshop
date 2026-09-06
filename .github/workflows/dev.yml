@@ -73,7 +73,8 @@ jobs:
             ./ "dev-server:$DEPLOY_PATH/"
 
       - name: App auf dem Server starten
-        run: ssh dev-server "cd '$DEPLOY_PATH' && docker compose -p todo-dev up -d --build --wait --wait-timeout 240"
+        run: |
+          ssh dev-server "cd '$DEPLOY_PATH' && docker compose -p todo-dev -f docker-compose.yml -f docker-compose.caddy.yml config --quiet && docker compose -p todo-dev -f docker-compose.yml -f docker-compose.caddy.yml up -d --build --wait --wait-timeout 240"
 
       - name: Erreichbarkeit prüfen
         run: curl --fail --show-error --silent --retry 5 --retry-all-errors --connect-timeout 10 --max-time 20 "${APP_URL%/}/health.php"

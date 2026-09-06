@@ -1,0 +1,10 @@
+services:
+  todo-app:
+    networks:
+      - default
+      - caddy
+
+networks:
+  caddy:
+    external: true
+    name: ${CADDY_NETWORK:?CADDY_NETWORK muss dem bestehenden Caddy-Netzwerk entsprechen}

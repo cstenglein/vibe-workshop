@@ -21,21 +21,23 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 "${compose[@]}" config --quiet
+# Validate deployment configuration without connecting tests to the real proxy network.
+CADDY_NETWORK=test-caddy-config "${compose[@]}" -f docker-compose.caddy.yml config --quiet
 "${compose[@]}" build
-"${compose[@]}" run --rm --no-deps --entrypoint sh app -c 'set -e; for file in /var/www/app/*.php /var/www/app/public/*.php /var/www/scripts/*.php; do php -l "$file"; done'
+"${compose[@]}" run --rm --no-deps --entrypoint sh todo-app -c 'set -e; for file in /var/www/app/*.php /var/www/app/public/*.php /var/www/scripts/*.php; do php -l "$file"; done'
 "${compose[@]}" up -d --wait --wait-timeout 240
-"${compose[@]}" exec -T app php -- exercise < tests/http_test.php
-"${compose[@]}" exec -T app php /var/www/scripts/migrate.php
-"${compose[@]}" exec -T app php /var/www/scripts/migrate.php
+"${compose[@]}" exec -T todo-app php -- exercise < tests/http_test.php
+"${compose[@]}" exec -T todo-app php /var/www/scripts/migrate.php
+"${compose[@]}" exec -T todo-app php /var/www/scripts/migrate.php
 # Applied migrations must not be silently changed; a CLI failure must stop startup.
-"${compose[@]}" exec -T app sh -c 'printf "\n-- changed\n" >> /var/www/migrations/001_create_todos.sql'
-if "${compose[@]}" exec -T app php /var/www/scripts/migrate.php > "$work/migration-error" 2>&1; then
+"${compose[@]}" exec -T todo-app sh -c 'printf "\n-- changed\n" >> /var/www/migrations/001_create_todos.sql'
+if "${compose[@]}" exec -T todo-app php /var/www/scripts/migrate.php > "$work/migration-error" 2>&1; then
     printf 'Veränderte Migration wurde unerwartet akzeptiert.\n' >&2
     exit 1
 fi
 "${compose[@]}" up -d --force-recreate --wait --wait-timeout 240
-"${compose[@]}" exec -T app php -- persistence < tests/http_test.php
-"${compose[@]}" exec -T app php -r 'require "/var/www/app/bootstrap.php"; if ((int) database()->query("SELECT COUNT(*) FROM schema_migrations")->fetchColumn() !== count(glob("/var/www/migrations/*.sql"))) { exit(1); }'
+"${compose[@]}" exec -T todo-app php -- persistence < tests/http_test.php
+"${compose[@]}" exec -T todo-app php -r 'require "/var/www/app/bootstrap.php"; if ((int) database()->query("SELECT COUNT(*) FROM schema_migrations")->fetchColumn() !== count(glob("/var/www/migrations/*.sql"))) { exit(1); }'
 "${compose[@]}" stop db
-"${compose[@]}" exec -T app php -- unavailable < tests/http_test.php
+"${compose[@]}" exec -T todo-app php -- unavailable < tests/http_test.php
 printf 'Alle Tests erfolgreich.\n'
