@@ -191,8 +191,10 @@ bereits ausgeführte Migrationen nicht verändern.
 Ein optionaler GitHub-Actions-Workflow für Tests und SSH-Deployment ist in
 [`.github/workflows/dev.yml`](.github/workflows/dev.yml) enthalten. Er benötigt die
 Secrets `SSH_PRIVATE_KEY` und `SSH_KNOWN_HOSTS` sowie die Variablen `DEPLOY_HOST`,
-`DEPLOY_USER`, `DEPLOY_PATH`, `APP_URL` und optional `DEPLOY_PORT` (Standard: `22`).
-`APP_URL` ist hier die öffentliche URL für den Health-Check nach dem Deployment.
+`DEPLOY_USER`, `DEPLOY_PATH` und optional `DEPLOY_PORT` (Standard: `22`) sowie `APP_URL`.
+`APP_URL` ist die öffentliche URL für den Health-Check nach dem Deployment. Ist sie
+nicht gesetzt oder leer, wird dieser Check übersprungen; die internen Docker-Healthchecks
+bleiben aktiv.
 
 Der Workflow erwartet einen eigenen Deployment-Ordner mit vorbereiteter `.env`
 und ohne Git-Checkout. Er synchronisiert die Projektdateien per rsync und entfernt

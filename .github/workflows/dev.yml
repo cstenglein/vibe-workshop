@@ -77,4 +77,5 @@ jobs:
           ssh dev-server "cd '$DEPLOY_PATH' && docker compose -p todo-dev -f docker-compose.yml -f docker-compose.caddy.yml config --quiet && docker compose -p todo-dev -f docker-compose.yml -f docker-compose.caddy.yml up -d --build --wait --wait-timeout 240"
 
       - name: Erreichbarkeit prüfen
+        if: env.APP_URL != ''
         run: curl --fail --show-error --silent --retry 5 --retry-all-errors --connect-timeout 10 --max-time 20 "${APP_URL%/}/health.php"
